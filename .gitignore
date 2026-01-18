@@ -1,18 +1,10 @@
-# Java
-*.class
-*.jar
-*.war
-*.ear
-
-# Gradle
 .gradle/
-build/
-
-# IntelliJ / VS Code
+**/build/
+out/
+bin/
+*.class
+app/*.class
 .idea/
-.vscode/
 *.iml
-
-# OS
+.vscode/
 .DS_Store
-Thumbs.db

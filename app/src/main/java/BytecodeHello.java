@@ -95,9 +95,7 @@ public class BytecodeHello implements Opcodes {
     public static void main(String[] args) throws Exception {
 
         // 1. Read source file - My language
-        String source = Files.readString(Path.of("program.adir")).trim();
-      
-
+        String source = new String(BytecodeHello.class.getResourceAsStream("/program.adir").readAllBytes()).trim();
 
         Parser parser = new Parser(source);
         List<Stmt> program = parser.parseProgram();
