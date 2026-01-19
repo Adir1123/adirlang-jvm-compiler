@@ -20,13 +20,13 @@ public class AdirLangCompiler implements Opcodes {
 
 
     // =========================
-    // Main: compile program.adir into Main.class
+    // Main: compile program.adir into AdirProgram.class
     // =========================
 
     public static void main(String[] args) throws Exception {
 
 
-        // 1. Read source file - My language
+        // Read source file - My language
         var in = AdirLangCompiler.class.getResourceAsStream("/program.adir");
 
         if (in == null) {
@@ -81,6 +81,6 @@ public class AdirLangCompiler implements Opcodes {
         Files.write(out, cw.toByteArray());
 
 
-        System.out.println("Compiled AdirLang source (program.adir) to JVM bytecode (AdirProgram.class) inside app/build/run");
+        System.out.println("Compiled AdirLang source (program.adir) to JVM bytecode (AdirProgram.class)");
     }
 }

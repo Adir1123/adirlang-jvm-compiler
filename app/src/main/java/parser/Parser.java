@@ -1,149 +1,125 @@
 package parser;
 
 import ast.*;
+import lexer.Lexer;
+import lexer.Token;
+import lexer.TokenType;
 
 import java.util.ArrayList;
 import java.util.List;
 
-
+// Building AST
 public class Parser {
 
-    private final String input;
+    private final List<Token> tokens;
     private int index = 0;
 
-    public Parser(String input) {
-        this.input = input.replaceAll("\\s+", "");
+
+    public Parser(String source) {
+        this.tokens = new Lexer(source).tokenize();
     }
 
-
-    // Public entry
+    // public entry point
     public List<Stmt> parseProgram() {
         List<Stmt> stmts = new ArrayList<>();
-            
-        while (peek() != '\0'){
+        while (!check(TokenType.EOF)) {
             stmts.add(parseStatement());
         }
         return stmts;
     }
 
-
-    // ---------- Helpers ----------
-
-    private char peek() {
-        if (index >= input.length()) {
-            return '\0';
-        }
-        return input.charAt(index);
-    }
-
-        
-    private void consume(char c){
-        if (peek() != c){
-            throw new RuntimeException("Expected '" + c + "' but found '" + peek());
-        }
-        index++;
-    }
-
-
-    private boolean startsWithAt(String s) {
-        return input.startsWith(s, index);
-    }
-    
-
-    // ---------- Statements ----------
+    // ---------------- Statements ----------------
 
     private Stmt parseStatement() {
-        if (startsWithAt("let")) {
-            index += 3; // skip "let"
-            String name = parseIdentifier();
-            consume('=');
+        if (match(TokenType.LET)) {
+            Token nameTok = consume(TokenType.IDENT, "Expected identifier after 'let'");
+            consume(TokenType.EQUALS, "Expected '=' after identifier");
             Expr value = parseAddition();
-            consume(';');
-            return new LetStmt(name, value);
+            consume(TokenType.SEMI, "Expected ';' after expression");
+            return new LetStmt(nameTok.lexeme, value);
         }
 
-        if (startsWithAt("print")) {
-            index += 5; // skip "print"
+        if (match(TokenType.PRINT)) {
             Expr expr = parseAddition();
-            consume(';');
+            consume(TokenType.SEMI, "Expected ';' after expression");
             return new PrintStmt(expr);
         }
 
-        throw new RuntimeException("Unknown statement at position " + index);
+        Token t = peek();
+        throw errorAt(t, "Unknown statement");
     }
 
+    // ---------------- Expressions ----------------
+    // precedence:
+    // multiplication (*) > addition (+)
 
-    private String parseIdentifier() {
-
-        int start = index;
-        while (Character.isLetter(peek())) {
-            index++;
-        }
-
-        if (start == index) {
-            throw new RuntimeException("Expected identifier at position " + index);
-        }
-
-        return input.substring(start, index);
-    }
-
-
-    // ---------- Expressions ----------
-
-    private Expr parseAddition() {  // Whole '+' Expr
-
+    private Expr parseAddition() {
         Expr expr = parseMultiplication();
-        while (index < input.length() && input.charAt(index) == '+') {
-            index++; // skip '+'
+        while (match(TokenType.PLUS)) {
             Expr right = parseMultiplication();
             expr = new BinaryExpr(expr, '+', right);
         }
         return expr;
     }
 
-
-        
-    private Expr parseMultiplication() { // Whole '*' Expr
-
+    private Expr parseMultiplication() {
         Expr expr = parsePrimary();
-        while (index < input.length() && input.charAt(index) == '*') {
-            index++; // skip '*'
+        while (match(TokenType.STAR)) {
             Expr right = parsePrimary();
             expr = new BinaryExpr(expr, '*', right);
         }
         return expr;
     }
 
-
-        
-    private Expr parsePrimary() { // Whole '()'
-        if (peek() == '(') {
-            consume('(');
+    private Expr parsePrimary() {
+        if (match(TokenType.LPAREN)) {
             Expr inside = parseAddition();
-            consume(')');
+            consume(TokenType.RPAREN, "Expected ')' after expression");
             return inside;
         }
 
-        if (Character.isDigit(peek())) {
-            return parseInteger();
+        if (match(TokenType.NUMBER)) {
+            Token n = previous();
+            return new NumberExpr(n.intValue);
         }
 
-        if (Character.isLetter(peek())) {
-            String name = parseIdentifier();
-            return new VarExpr(name);
+        if (match(TokenType.IDENT)) {
+            Token name = previous();
+            return new VarExpr(name.lexeme);
         }
 
-        throw new RuntimeException("Expected primary expression at position " + index);
+        Token t = peek();
+        throw errorAt(t, "Expected primary expression");
     }
 
+    // ---------------- Token helpers ----------------
 
-    private Expr parseInteger() {
-        int start = index;
-        while (Character.isDigit(peek())) {
+    private Token peek() {
+        return tokens.get(index);
+    }
+
+    private Token previous() {
+        return tokens.get(index - 1);
+    }
+
+    private boolean check(TokenType type) {
+        return peek().type == type;
+    }
+
+    private boolean match(TokenType type) {
+        if (check(type)) {
             index++;
+            return true;
         }
-            
-        int value = Integer.parseInt(input.substring(start, index));
-        return new NumberExpr(value);
+        return false;
+    }
+
+    private Token consume(TokenType type, String message) {
+        if (check(type)) return tokens.get(index++);
+        throw errorAt(peek(), message);
+    }
+
+    private RuntimeException errorAt(Token t, String msg) {
+        return new RuntimeException("Parse error at " + t.line + ":" + t.col + " - " + msg);
     }
 }
