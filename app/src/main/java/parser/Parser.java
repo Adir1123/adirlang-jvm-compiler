@@ -8,18 +8,15 @@ import lexer.TokenType;
 import java.util.ArrayList;
 import java.util.List;
 
-// Building AST
 public class Parser {
 
     private final List<Token> tokens;
     private int index = 0;
 
-
     public Parser(String source) {
         this.tokens = new Lexer(source).tokenize();
     }
 
-    // public entry point
     public List<Stmt> parseProgram() {
         List<Stmt> stmts = new ArrayList<>();
         while (!check(TokenType.EOF)) {
@@ -32,17 +29,24 @@ public class Parser {
 
     private Stmt parseStatement() {
         if (match(TokenType.LET)) {
+            Token letTok = previous();
+
             Token nameTok = consume(TokenType.IDENT, "Expected identifier after 'let'");
             consume(TokenType.EQUALS, "Expected '=' after identifier");
+
             Expr value = parseAddition();
             consume(TokenType.SEMI, "Expected ';' after expression");
-            return new LetStmt(nameTok.lexeme, value);
+
+            return new LetStmt(nameTok.lexeme, value, letTok.line, letTok.col);
         }
 
         if (match(TokenType.PRINT)) {
+            Token printTok = previous();
+
             Expr expr = parseAddition();
             consume(TokenType.SEMI, "Expected ';' after expression");
-            return new PrintStmt(expr);
+
+            return new PrintStmt(expr, printTok.line, printTok.col);
         }
 
         Token t = peek();
@@ -50,14 +54,14 @@ public class Parser {
     }
 
     // ---------------- Expressions ----------------
-    // precedence:
-    // multiplication (*) > addition (+)
+    // precedence: * > +
 
     private Expr parseAddition() {
         Expr expr = parseMultiplication();
         while (match(TokenType.PLUS)) {
+            Token opTok = previous();
             Expr right = parseMultiplication();
-            expr = new BinaryExpr(expr, '+', right);
+            expr = new BinaryExpr(expr, '+', right, opTok.line, opTok.col);
         }
         return expr;
     }
@@ -65,8 +69,9 @@ public class Parser {
     private Expr parseMultiplication() {
         Expr expr = parsePrimary();
         while (match(TokenType.STAR)) {
+            Token opTok = previous();
             Expr right = parsePrimary();
-            expr = new BinaryExpr(expr, '*', right);
+            expr = new BinaryExpr(expr, '*', right, opTok.line, opTok.col);
         }
         return expr;
     }
@@ -80,12 +85,12 @@ public class Parser {
 
         if (match(TokenType.NUMBER)) {
             Token n = previous();
-            return new NumberExpr(n.intValue);
+            return new NumberExpr(n.intValue, n.line, n.col);
         }
 
         if (match(TokenType.IDENT)) {
             Token name = previous();
-            return new VarExpr(name.lexeme);
+            return new VarExpr(name.lexeme, name.line, name.col);
         }
 
         Token t = peek();

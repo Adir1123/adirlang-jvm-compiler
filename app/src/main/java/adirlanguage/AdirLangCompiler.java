@@ -27,15 +27,17 @@ public class AdirLangCompiler implements Opcodes {
 
 
         // Read source file - My language
-        var in = AdirLangCompiler.class.getResourceAsStream("/program.adir");
-
-        if (in == null) {
-            throw new RuntimeException("program.adir not found in resources");
+        String source;
+        try (var in = AdirLangCompiler.class.getResourceAsStream("/program.adir")) {
+            if (in == null) throw new RuntimeException("program.adir not found in resources");
+            source = new String(in.readAllBytes()).trim();
         }
-        
-        String source = new String(in.readAllBytes()).trim();
+
         Parser parser = new Parser(source);
         List<Stmt> program = parser.parseProgram();
+
+        new semantic.SemanticAnalyzer().check(program);
+
         
 
         // AdirProgram.class
@@ -79,8 +81,5 @@ public class AdirLangCompiler implements Opcodes {
         Path out = Path.of("adirlanguage", "runtime", "ProgramAdir.class");
         Files.createDirectories(out.getParent());
         Files.write(out, cw.toByteArray());
-
-
-        System.out.println("Compiled AdirLang source (program.adir) to JVM bytecode (AdirProgram.class)");
     }
 }
