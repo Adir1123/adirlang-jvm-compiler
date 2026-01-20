@@ -37,6 +37,9 @@ public class Lexer {
             if (c == ';') { advance(); tokens.add(new Token(TokenType.SEMI, ";", null, startLine, startCol)); continue; }
             if (c == '(') { advance(); tokens.add(new Token(TokenType.LPAREN, "(", null, startLine, startCol)); continue; }
             if (c == ')') { advance(); tokens.add(new Token(TokenType.RPAREN, ")", null, startLine, startCol)); continue; }
+            if (c == '{') { advance(); tokens.add(new Token(TokenType.LBRACE, "{", null, startLine, startCol)); continue; }
+            if (c == '}') { advance(); tokens.add(new Token(TokenType.RBRACE, "}", null, startLine, startCol)); continue; }
+
 
             // Number
             if (isDigit(c)) {
@@ -57,6 +60,8 @@ public class Lexer {
                 TokenType type = switch (ident) {
                     case "let" -> TokenType.LET;
                     case "print" -> TokenType.PRINT;
+                    case "if" -> TokenType.IF;
+                    case "else" -> TokenType.ELSE;
                     default -> TokenType.IDENT;
                 };
                 tokens.add(new Token(type, ident, null, startLine, startCol));

@@ -1,4 +1,10 @@
-let x = (1 + 2) * 3;
-print x;
-let y = 5;
+let y = 2+3*4;
 print y;
+let x = 7;
+let z = x+y;
+print x + y;
+if (z) {
+    print z + 5;
+} else {
+    print z;
+}

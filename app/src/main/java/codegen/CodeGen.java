@@ -1,6 +1,8 @@
 package codegen;
 
 import ast.*;
+
+import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 
@@ -105,6 +107,38 @@ public class CodeGen implements Opcodes {
             mv.visitMethodInsn(INVOKEVIRTUAL, "java/io/PrintStream", "println", "(I)V", false); // println
             return;
         }
+        
+        // if()
+        if (stmt instanceof IfStmt s) {
+
+            Label elseLabel = new Label();
+            Label endLabel = new Label();
+
+            // condition
+            emitExpr(mv, s.condition, locals);
+
+            // if == 0 jump to else
+            mv.visitJumpInsn(IFEQ, elseLabel);
+
+            // then
+            for (Stmt st : s.thenBranch) {
+                emitStmt(mv, st, locals, nextLocalIndex);
+            }
+
+            mv.visitJumpInsn(GOTO, endLabel);
+
+            // else
+            mv.visitLabel(elseLabel);
+            if (s.elseBranch != null) {
+                for (Stmt st : s.elseBranch) {
+                    emitStmt(mv, st, locals, nextLocalIndex);
+                }
+            }
+
+            mv.visitLabel(endLabel);
+            return;
+        }
+
 
         throw new RuntimeException("Unknown Stmt node");
     }

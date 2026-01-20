@@ -16,6 +16,10 @@ public enum TokenType {
     SEMI,       // ;
     LPAREN,     // (
     RPAREN,     // )
+    IF,
+    LBRACE,
+    RBRACE,
+    ELSE,
 
     EOF
 }

@@ -28,6 +28,23 @@ public class SemanticAnalyzer {
             return;
         }
 
+        if (stmt instanceof IfStmt s) {
+            
+            checkExpr(s.condition, defined);
+
+            for (Stmt st : s.thenBranch) {
+                checkStmt(st, defined);
+            }
+
+            if (s.elseBranch != null) {
+                for (Stmt st : s.elseBranch) {
+                  checkStmt(st, defined);
+                }
+            }
+            return;
+        }
+
+
         throw new RuntimeException("Unknown Stmt node (semantic)");
     }
 

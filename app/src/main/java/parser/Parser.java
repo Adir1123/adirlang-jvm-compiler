@@ -28,6 +28,7 @@ public class Parser {
     // ---------------- Statements ----------------
 
     private Stmt parseStatement() {
+
         if (match(TokenType.LET)) {
             Token letTok = previous();
 
@@ -47,6 +48,23 @@ public class Parser {
             consume(TokenType.SEMI, "Expected ';' after expression");
 
             return new PrintStmt(expr, printTok.line, printTok.col);
+        }
+
+        if (match(TokenType.IF)) {
+            Token ifTok = previous();
+
+             consume(TokenType.LPAREN, "Expected '(' after if");
+            Expr condition = parseAddition();
+            consume(TokenType.RPAREN, "Expected ')' after condition");
+
+            List<Stmt> thenBranch = parseBlock();
+
+            List<Stmt> elseBranch = null;
+            if (match(TokenType.ELSE)) {
+                elseBranch = parseBlock();
+            }
+
+            return new IfStmt(condition, thenBranch, elseBranch, ifTok.line, ifTok.col);
         }
 
         Token t = peek();
@@ -98,6 +116,19 @@ public class Parser {
     }
 
     // ---------------- Token helpers ----------------
+
+    private List<Stmt> parseBlock() {
+        consume(TokenType.LBRACE, "Expected '{'");
+
+        List<Stmt> stmts = new ArrayList<>();
+        while (!check(TokenType.RBRACE)) {
+          stmts.add(parseStatement());
+        }
+
+        consume(TokenType.RBRACE, "Expected '}'");
+        return stmts;
+    }
+
 
     private Token peek() {
         return tokens.get(index);
