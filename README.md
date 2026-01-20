@@ -72,9 +72,9 @@ if (z) {
         ↓
  Semantic Analysis
         ↓
-  Bytecode Generation
+Bytecode Generation
         ↓
-   JVM .class output
+ JVM .class output
 ```
 
 ---
