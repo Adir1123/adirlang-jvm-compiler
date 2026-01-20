@@ -39,9 +39,9 @@ let y = 2+3*4;
 print y;
 let x = 7;
 let z = x+y;
-print x + y;
+print x+y;
 if (z) {
-    print z + 5;
+    print z+5;
 } else {
     print z;
 }
