@@ -1,145 +1,130 @@
 package codegen;
 
 import ast.*;
-
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
-import org.objectweb.asm.Opcodes;
 
-import java.util.Map;
+import static org.objectweb.asm.Opcodes.*;
 
-public class CodeGen implements Opcodes {
+/**
+ * JVM bytecode emitter for AdirLang.
+ *
+ * <p>Translates a list of {@link Stmt} AST nodes into ASM method-visitor
+ * calls. Each instance is bound to a single {@link MethodVisitor} and a
+ * {@link CodeGenContext} that manages local-variable slot allocation.
+ */
+public class CodeGen {
 
-    // ============================
-    // Helper — pushes an integer constant onto the operand stack
-    // Chooses the most efficient instruction based on value range
-    // ============================
+    private final MethodVisitor mv;
+    private final CodeGenContext ctx;
 
-    static void pushInt(MethodVisitor mv, int value) {
-
-
-        if (value == -1) { mv.visitInsn(ICONST_M1); return; }
-        if (value == 0)  { mv.visitInsn(ICONST_0);  return; }
-        if (value == 1)  { mv.visitInsn(ICONST_1);  return; }
-        if (value == 2)  { mv.visitInsn(ICONST_2);  return; }
-        if (value == 3)  { mv.visitInsn(ICONST_3);  return; }
-        if (value == 4)  { mv.visitInsn(ICONST_4);  return; }
-        if (value == 5)  { mv.visitInsn(ICONST_5);  return; }
-
-        if (value >= -128 && value <= 127) {
-            mv.visitIntInsn(BIPUSH, value);
-            return;
-        }
-
-        if (value >= -32768 && value <= 32767) {
-            mv.visitIntInsn(SIPUSH, value);
-            return;
-        }
-
-        mv.visitLdcInsn(value);
+    public CodeGen(MethodVisitor mv, CodeGenContext ctx) {
+        this.mv  = mv;
+        this.ctx = ctx;
     }
 
+    // ---------------------------------------------------------------- Statements
 
-
-    // ============================
-    // Codegen — converts Expr nodes into JVM bytecode instructions
-    // ============================
-
-    public static void emitExpr(MethodVisitor mv, Expr expr, Map<String, Integer> locals) {
-
-        
-        if (expr instanceof NumberExpr n) {
-            pushInt(mv, n.value);
-            return;
-        }
-
-        
-        if (expr instanceof VarExpr v) {
-            Integer slot = locals.get(v.name);
-            if (slot == null) {
-                throw new RuntimeException("Codegen error at " + v.line + ":" + v.col + " - Undefined variable: " + v.name);
-            }
-            mv.visitVarInsn(ILOAD, slot);
-            return;
-        }
-
-        // Binary: emit left, emit right, then op
-        if (expr instanceof BinaryExpr b) {
-            emitExpr(mv, b.left, locals);
-            emitExpr(mv, b.right, locals);
-
-            if (b.op == '+') {
-                mv.visitInsn(IADD);
-                return;
-            }
-
-            if (b.op == '*') {
-                mv.visitInsn(IMUL);
-                return;
-            }
-
-            throw new RuntimeException("Codegen error at " + b.line + ":" + b.col + " - Unknown operator: " + b.op);
-        }
-
-        throw new RuntimeException("Unknown Expr node");
-    }
-
-
-    // ============================
-    // Codegen — converts Stmt nodes into JVM bytecode instructions
-    // ============================
-
-    public static void emitStmt(MethodVisitor mv, Stmt stmt, Map<String, Integer> locals, int[] nextLocalIndex) {
-
-        // let x = expr;
+    public void emitStmt(Stmt stmt) {
         if (stmt instanceof LetStmt s) {
-            emitExpr(mv, s.value, locals);
-
-            int slot = locals.computeIfAbsent(s.name, k -> nextLocalIndex[0]++);
-            mv.visitVarInsn(ISTORE, slot);
+            emitExpr(s.value());
+            mv.visitVarInsn(ISTORE, ctx.allocate(s.name()));
             return;
         }
 
-        // print expr;
         if (stmt instanceof PrintStmt s) {
-            mv.visitFieldInsn(GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;"); // System.out
-            emitExpr(mv, s.expr, locals);
-            mv.visitMethodInsn(INVOKEVIRTUAL, "java/io/PrintStream", "println", "(I)V", false); // println
+            mv.visitFieldInsn(GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;");
+            emitExpr(s.expr());
+            mv.visitMethodInsn(INVOKEVIRTUAL, "java/io/PrintStream", "println", "(I)V", false);
             return;
         }
-        
-        // if()
+
         if (stmt instanceof IfStmt s) {
-
-            Label elseLabel = new Label();
-            Label endLabel = new Label();
-
-            // condition
-            emitExpr(mv, s.condition, locals);
-
-            // if == 0 jump to else
-            mv.visitJumpInsn(IFEQ, elseLabel);
-
-            // then
-            for (Stmt st : s.thenBranch) {
-                emitStmt(mv, st, locals, nextLocalIndex);
-            }
-
-            mv.visitJumpInsn(GOTO, endLabel);
-
-            // else
-            mv.visitLabel(elseLabel);
-            if (s.elseBranch != null) {
-                for (Stmt st : s.elseBranch) {
-                    emitStmt(mv, st, locals, nextLocalIndex);
-                }
-            }
-
-            mv.visitLabel(endLabel);
+            emitIf(s);
             return;
         }
 
+        // Unreachable for a well-formed sealed Stmt hierarchy.
+        throw new RuntimeException("Unknown Stmt node in codegen: " + stmt.getClass().getSimpleName());
+    }
 
-        throw new RuntimeException("Unknown Stmt node");
+    private void emitIf(IfStmt s) {
+        emitExpr(s.condition());
+
+        if (s.elseBranch().isEmpty()) {
+            // No else branch: a single label at the end suffices.
+            // Skip the GOTO that would be needed if an else block existed.
+            Label end = new Label();
+            mv.visitJumpInsn(IFEQ, end);
+            s.thenBranch().forEach(this::emitStmt);
+            mv.visitLabel(end);
+        } else {
+            // Has else branch: jump over then-block into else-block on false.
+            Label elseLabel = new Label();
+            Label end       = new Label();
+            mv.visitJumpInsn(IFEQ, elseLabel);
+            s.thenBranch().forEach(this::emitStmt);
+            mv.visitJumpInsn(GOTO, end);
+            mv.visitLabel(elseLabel);
+            s.elseBranch().get().forEach(this::emitStmt);
+            mv.visitLabel(end);
+        }
+    }
+
+    // ---------------------------------------------------------------- Expressions
+
+    private void emitExpr(Expr expr) {
+        if (expr instanceof NumberExpr n) {
+            pushInt(n.value());
+            return;
+        }
+
+        if (expr instanceof VarExpr v) {
+            mv.visitVarInsn(ILOAD, ctx.lookup(v.name()));
+            return;
+        }
+
+        if (expr instanceof BinaryExpr b) {
+            emitExpr(b.left());
+            emitExpr(b.right());
+            switch (b.op()) {
+                case ADD -> mv.visitInsn(IADD);
+                case MUL -> mv.visitInsn(IMUL);
+            }
+            return;
+        }
+
+        // Unreachable for a well-formed sealed Expr hierarchy.
+        throw new RuntimeException("Unknown Expr node in codegen: " + expr.getClass().getSimpleName());
+    }
+
+    // ------------------------------------------------------- Integer push helper
+
+    /**
+     * Emits the most compact instruction sequence that pushes {@code value}
+     * onto the operand stack.
+     *
+     * <ul>
+     *   <li>{@code -1..5}   — {@code ICONST_M1} / {@code ICONST_0..5} (1 byte)</li>
+     *   <li>{@code -128..127}  — {@code BIPUSH} (2 bytes)</li>
+     *   <li>{@code -32768..32767} — {@code SIPUSH} (3 bytes)</li>
+     *   <li>anything else   — {@code LDC} (constant pool entry)</li>
+     * </ul>
+     */
+    private void pushInt(int value) {
+        switch (value) {
+            case -1 -> mv.visitInsn(ICONST_M1);
+            case  0 -> mv.visitInsn(ICONST_0);
+            case  1 -> mv.visitInsn(ICONST_1);
+            case  2 -> mv.visitInsn(ICONST_2);
+            case  3 -> mv.visitInsn(ICONST_3);
+            case  4 -> mv.visitInsn(ICONST_4);
+            case  5 -> mv.visitInsn(ICONST_5);
+            default -> {
+                if      (value >= -128   && value <= 127)   mv.visitIntInsn(BIPUSH, value);
+                else if (value >= -32768 && value <= 32767) mv.visitIntInsn(SIPUSH, value);
+                else                                        mv.visitLdcInsn(value);
+            }
+        }
     }
 }

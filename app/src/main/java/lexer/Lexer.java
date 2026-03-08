@@ -3,13 +3,18 @@ package lexer;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Tokenizes AdirLang source text into a flat {@link Token} list.
+ *
+ * <p>Line and column numbers are 1-based and attached to every token for
+ * use in diagnostic messages later in the pipeline.
+ */
 public class Lexer {
 
     private final String input;
-    private int i = 0;
-
-    private int line = 1; 
-    private int col = 1;  
+    private int pos  = 0;
+    private int line = 1;
+    private int col  = 1;
 
     public Lexer(String input) {
         this.input = input;
@@ -22,49 +27,42 @@ public class Lexer {
             skipWhitespace();
 
             int startLine = line;
-            int startCol = col;
-
+            int startCol  = col;
             char c = peek();
+
             if (c == '\0') {
                 tokens.add(new Token(TokenType.EOF, "", null, startLine, startCol));
                 return tokens;
             }
 
-            // Single-character symbols
-            if (c == '+') { advance(); tokens.add(new Token(TokenType.PLUS, "+", null, startLine, startCol)); continue; }
-            if (c == '*') { advance(); tokens.add(new Token(TokenType.STAR, "*", null, startLine, startCol)); continue; }
-            if (c == '=') { advance(); tokens.add(new Token(TokenType.EQUALS, "=", null, startLine, startCol)); continue; }
-            if (c == ';') { advance(); tokens.add(new Token(TokenType.SEMI, ";", null, startLine, startCol)); continue; }
-            if (c == '(') { advance(); tokens.add(new Token(TokenType.LPAREN, "(", null, startLine, startCol)); continue; }
-            if (c == ')') { advance(); tokens.add(new Token(TokenType.RPAREN, ")", null, startLine, startCol)); continue; }
-            if (c == '{') { advance(); tokens.add(new Token(TokenType.LBRACE, "{", null, startLine, startCol)); continue; }
-            if (c == '}') { advance(); tokens.add(new Token(TokenType.RBRACE, "}", null, startLine, startCol)); continue; }
+            // Single-character symbols — map char to TokenType, then create token uniformly
+            TokenType symbolType = switch (c) {
+                case '+' -> TokenType.PLUS;
+                case '*' -> TokenType.STAR;
+                case '=' -> TokenType.EQUALS;
+                case ';' -> TokenType.SEMI;
+                case '(' -> TokenType.LPAREN;
+                case ')' -> TokenType.RPAREN;
+                case '{' -> TokenType.LBRACE;
+                case '}' -> TokenType.RBRACE;
+                default  -> null;
+            };
 
-
-            // Number
-            if (isDigit(c)) {
-                String num = readNumber();
-                int value;
-                try {
-                    value = Integer.parseInt(num);
-                } catch (NumberFormatException e) {
-                    throw errorAt(startLine, startCol, "Integer literal out of range: " + num);
-                }
-                tokens.add(new Token(TokenType.NUMBER, num, value, startLine, startCol));
+            if (symbolType != null) {
+                advance();
+                tokens.add(new Token(symbolType, String.valueOf(c), null, startLine, startCol));
                 continue;
             }
 
-            // Identifier / keyword
+            // Number literal
+            if (isDigit(c)) {
+                tokens.add(scanNumber(startLine, startCol));
+                continue;
+            }
+
+            // Identifier or keyword
             if (isLetter(c) || c == '_') {
-                String ident = readIdentifier();
-                TokenType type = switch (ident) {
-                    case "let" -> TokenType.LET;
-                    case "print" -> TokenType.PRINT;
-                    case "if" -> TokenType.IF;
-                    case "else" -> TokenType.ELSE;
-                    default -> TokenType.IDENT;
-                };
-                tokens.add(new Token(type, ident, null, startLine, startCol));
+                tokens.add(scanIdentOrKeyword(startLine, startCol));
                 continue;
             }
 
@@ -72,70 +70,59 @@ public class Lexer {
         }
     }
 
-    // ---------------- helpers ----------------
+    // ------------------------------------------------------------------ scan
+
+    private Token scanNumber(int startLine, int startCol) {
+        int start = pos;
+        while (isDigit(peek())) advance();
+        String text = input.substring(start, pos);
+        try {
+            return new Token(TokenType.NUMBER, text, Integer.parseInt(text), startLine, startCol);
+        } catch (NumberFormatException e) {
+            throw errorAt(startLine, startCol, "Integer literal out of range: " + text);
+        }
+    }
+
+    private Token scanIdentOrKeyword(int startLine, int startCol) {
+        int start = pos;
+        while (isIdentChar(peek())) advance();
+        String text = input.substring(start, pos);
+        TokenType type = switch (text) {
+            case "let"   -> TokenType.LET;
+            case "print" -> TokenType.PRINT;
+            case "if"    -> TokenType.IF;
+            case "else"  -> TokenType.ELSE;
+            default      -> TokenType.IDENT;
+        };
+        return new Token(type, text, null, startLine, startCol);
+    }
+
+    // ---------------------------------------------------------------- helpers
 
     private void skipWhitespace() {
-        while (true) {
-            char c = peek();
-            if (c == ' ' || c == '\t' || c == '\r') {
-                advance();
-                continue;
-            }
-            if (c == '\n') {
-                advance(); // advance updates line/col
-                continue;
-            }
-            break;
-        }
+        while (isWhitespace(peek())) advance();
     }
 
     private char peek() {
-        if (i >= input.length()) return '\0';
-        return input.charAt(i);
+        return pos < input.length() ? input.charAt(pos) : '\0';
     }
 
+    /** Consumes the current character, updating line/col tracking. */
     private char advance() {
         char c = peek();
         if (c == '\0') return '\0';
-
-        i++;
-        if (c == '\n') {
-            line++;
-            col = 1;
-        } else {
-            col++;
-        }
+        pos++;
+        if (c == '\n') { line++; col = 1; }
+        else           { col++; }
         return c;
     }
 
-    private boolean isDigit(char c) {
-        return c >= '0' && c <= '9';
-    }
-
-    private boolean isLetter(char c) {
-        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
-    }
-
-    private String readNumber() {
-        int start = i;
-        while (isDigit(peek())) advance();
-        return input.substring(start, i);
-    }
-
-    private String readIdentifier() {
-        int start = i;
-        while (true) {
-            char c = peek();
-            if (isLetter(c) || isDigit(c) || c == '_') {
-                advance();
-            } else {
-                break;
-            }
-        }
-        return input.substring(start, i);
-    }
+    private boolean isWhitespace(char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; }
+    private boolean isDigit(char c)      { return c >= '0' && c <= '9'; }
+    private boolean isLetter(char c)     { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); }
+    private boolean isIdentChar(char c)  { return isLetter(c) || isDigit(c) || c == '_'; }
 
     private RuntimeException errorAt(int ln, int cl, String msg) {
-        return new RuntimeException("Lex error at " + ln + ":" + cl + " - " + msg);
+        return new RuntimeException("Lex error at " + ln + ":" + cl + " — " + msg);
     }
 }

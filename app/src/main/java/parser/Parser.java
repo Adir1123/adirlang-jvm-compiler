@@ -1,20 +1,28 @@
 package parser;
 
 import ast.*;
-import lexer.Lexer;
 import lexer.Token;
 import lexer.TokenType;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
+/**
+ * Recursive-descent parser for AdirLang.
+ *
+ * <p>Accepts a pre-tokenized {@link List}&lt;{@link Token}&gt; so the lexing
+ * and parsing stages remain independently testable.
+ *
+ * <p>Operator precedence (low → high): {@code +} → {@code *} → primary.
+ */
 public class Parser {
 
     private final List<Token> tokens;
     private int index = 0;
 
-    public Parser(String source) {
-        this.tokens = new Lexer(source).tokenize();
+    public Parser(List<Token> tokens) {
+        this.tokens = tokens;
     }
 
     public List<Stmt> parseProgram() {
@@ -25,73 +33,81 @@ public class Parser {
         return stmts;
     }
 
-    // ---------------- Statements ----------------
+    // ------------------------------------------------------------ Statements
 
     private Stmt parseStatement() {
-
-        if (match(TokenType.LET)) {
-            Token letTok = previous();
-
-            Token nameTok = consume(TokenType.IDENT, "Expected identifier after 'let'");
-            consume(TokenType.EQUALS, "Expected '=' after identifier");
-
-            Expr value = parseAddition();
-            consume(TokenType.SEMI, "Expected ';' after expression");
-
-            return new LetStmt(nameTok.lexeme, value, letTok.line, letTok.col);
-        }
-
-        if (match(TokenType.PRINT)) {
-            Token printTok = previous();
-
-            Expr expr = parseAddition();
-            consume(TokenType.SEMI, "Expected ';' after expression");
-
-            return new PrintStmt(expr, printTok.line, printTok.col);
-        }
-
-        if (match(TokenType.IF)) {
-            Token ifTok = previous();
-
-             consume(TokenType.LPAREN, "Expected '(' after if");
-            Expr condition = parseAddition();
-            consume(TokenType.RPAREN, "Expected ')' after condition");
-
-            List<Stmt> thenBranch = parseBlock();
-
-            List<Stmt> elseBranch = null;
-            if (match(TokenType.ELSE)) {
-                elseBranch = parseBlock();
-            }
-
-            return new IfStmt(condition, thenBranch, elseBranch, ifTok.line, ifTok.col);
-        }
+        if (match(TokenType.LET))   return parseLetStmt();
+        if (match(TokenType.PRINT)) return parsePrintStmt();
+        if (match(TokenType.IF))    return parseIfStmt();
 
         Token t = peek();
-        throw errorAt(t, "Unknown statement");
+        throw errorAt(t, "Expected a statement (let, print, if)");
     }
 
-    // ---------------- Expressions ----------------
-    // precedence: * > +
+    private LetStmt parseLetStmt() {
+        Token letTok  = previous();
+        Token nameTok = consume(TokenType.IDENT,  "Expected identifier after 'let'");
+        consume(TokenType.EQUALS, "Expected '=' after identifier");
+        Expr value = parseAddition();
+        consume(TokenType.SEMI, "Expected ';' after expression");
+        return new LetStmt(nameTok.lexeme(), value, letTok.line(), letTok.col());
+    }
+
+    private PrintStmt parsePrintStmt() {
+        Token printTok = previous();
+        Expr expr = parseAddition();
+        consume(TokenType.SEMI, "Expected ';' after expression");
+        return new PrintStmt(expr, printTok.line(), printTok.col());
+    }
+
+    private IfStmt parseIfStmt() {
+        Token ifTok = previous();
+        consume(TokenType.LPAREN, "Expected '(' after 'if'");
+        Expr condition = parseAddition();
+        consume(TokenType.RPAREN, "Expected ')' after condition");
+
+        List<Stmt> thenBranch = parseBlock();
+
+        Optional<List<Stmt>> elseBranch = match(TokenType.ELSE)
+                ? Optional.of(parseBlock())
+                : Optional.empty();
+
+        return new IfStmt(condition, thenBranch, elseBranch, ifTok.line(), ifTok.col());
+    }
+
+    // ---------------------------------------------------------------- Blocks
+
+    private List<Stmt> parseBlock() {
+        consume(TokenType.LBRACE, "Expected '{'");
+        List<Stmt> stmts = new ArrayList<>();
+        while (!check(TokenType.RBRACE) && !check(TokenType.EOF)) {
+            stmts.add(parseStatement());
+        }
+        consume(TokenType.RBRACE, "Expected '}'");
+        return stmts;
+    }
+
+    // ---------------------------------------------------------- Expressions
+    // Precedence (low → high): addition → multiplication → primary
 
     private Expr parseAddition() {
-        Expr expr = parseMultiplication();
+        Expr left = parseMultiplication();
         while (match(TokenType.PLUS)) {
             Token opTok = previous();
             Expr right = parseMultiplication();
-            expr = new BinaryExpr(expr, '+', right, opTok.line, opTok.col);
+            left = new BinaryExpr(left, Op.ADD, right, opTok.line(), opTok.col());
         }
-        return expr;
+        return left;
     }
 
     private Expr parseMultiplication() {
-        Expr expr = parsePrimary();
+        Expr left = parsePrimary();
         while (match(TokenType.STAR)) {
             Token opTok = previous();
             Expr right = parsePrimary();
-            expr = new BinaryExpr(expr, '*', right, opTok.line, opTok.col);
+            left = new BinaryExpr(left, Op.MUL, right, opTok.line(), opTok.col());
         }
-        return expr;
+        return left;
     }
 
     private Expr parsePrimary() {
@@ -100,54 +116,28 @@ public class Parser {
             consume(TokenType.RPAREN, "Expected ')' after expression");
             return inside;
         }
-
         if (match(TokenType.NUMBER)) {
             Token n = previous();
-            return new NumberExpr(n.intValue, n.line, n.col);
+            return new NumberExpr(n.intValue(), n.line(), n.col());
         }
-
         if (match(TokenType.IDENT)) {
             Token name = previous();
-            return new VarExpr(name.lexeme, name.line, name.col);
+            return new VarExpr(name.lexeme(), name.line(), name.col());
         }
-
-        Token t = peek();
-        throw errorAt(t, "Expected primary expression");
+        throw errorAt(peek(), "Expected a primary expression (number, variable, or parenthesized expression)");
     }
 
-    // ---------------- Token helpers ----------------
+    // --------------------------------------------------------- Token helpers
 
-    private List<Stmt> parseBlock() {
-        consume(TokenType.LBRACE, "Expected '{'");
+    private Token peek()     { return tokens.get(index); }
+    private Token previous() { return tokens.get(index - 1); }
 
-        List<Stmt> stmts = new ArrayList<>();
-        while (!check(TokenType.RBRACE)) {
-          stmts.add(parseStatement());
-        }
-
-        consume(TokenType.RBRACE, "Expected '}'");
-        return stmts;
-    }
-
-
-    private Token peek() {
-        return tokens.get(index);
-    }
-
-    private Token previous() {
-        return tokens.get(index - 1);
-    }
-
-    private boolean check(TokenType type) {
-        return peek().type == type;
-    }
+    private boolean check(TokenType type) { return peek().type() == type; }
 
     private boolean match(TokenType type) {
-        if (check(type)) {
-            index++;
-            return true;
-        }
-        return false;
+        if (!check(type)) return false;
+        index++;
+        return true;
     }
 
     private Token consume(TokenType type, String message) {
@@ -156,6 +146,6 @@ public class Parser {
     }
 
     private RuntimeException errorAt(Token t, String msg) {
-        return new RuntimeException("Parse error at " + t.line + ":" + t.col + " - " + msg);
+        return new RuntimeException("Parse error at " + t.line() + ":" + t.col() + " — " + msg);
     }
 }

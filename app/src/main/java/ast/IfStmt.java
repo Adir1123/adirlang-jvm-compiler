@@ -1,21 +1,19 @@
 package ast;
 
 import java.util.List;
+import java.util.Optional;
 
-public class IfStmt implements Stmt {
-
-    public final Expr condition;
-    public final List<Stmt> thenBranch;
-    public final List<Stmt> elseBranch;
-    public final int line;
-    public final int col;
-
-    public IfStmt(Expr condition, List<Stmt> thenBranch, List<Stmt> elseBranch, int line, int col) {
-
-        this.condition = condition;
-        this.thenBranch = thenBranch;
-        this.elseBranch = elseBranch;
-        this.line = line;
-        this.col = col;
-    }
-}
+/**
+ * An if/else statement, e.g. {@code if (cond) { ... } else { ... }}.
+ *
+ * <p>{@code elseBranch} is {@link Optional#empty()} when no {@code else}
+ * keyword was present. Using {@code Optional} instead of a nullable field
+ * makes the absent case explicit at every call site.
+ */
+public record IfStmt(
+        Expr condition,
+        List<Stmt> thenBranch,
+        Optional<List<Stmt>> elseBranch,
+        int line,
+        int col
+) implements Stmt {}

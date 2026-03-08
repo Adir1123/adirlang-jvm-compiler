@@ -1,25 +1,24 @@
 package lexer;
 
 public enum TokenType {
+
     // Keywords
-    LET,
-    PRINT,
+    LET, PRINT, IF, ELSE,
 
-    // Identifiers & literals
-    IDENT,
-    NUMBER,
+    // Identifiers and literals
+    IDENT, NUMBER,
 
-    // Symbols
-    PLUS,       // +
-    STAR,       // *
-    EQUALS,     // =
-    SEMI,       // ;
-    LPAREN,     // (
-    RPAREN,     // )
-    IF,
-    LBRACE,
-    RBRACE,
-    ELSE,
+    // Operators
+    PLUS,   // +
+    STAR,   // *
+    EQUALS, // =
+
+    // Delimiters
+    SEMI,   // ;
+    LPAREN, // (
+    RPAREN, // )
+    LBRACE, // {
+    RBRACE, // }
 
     EOF
 }

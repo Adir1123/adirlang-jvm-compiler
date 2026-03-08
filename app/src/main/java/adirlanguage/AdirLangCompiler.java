@@ -1,53 +1,83 @@
 package adirlanguage;
 
-import ast.*;
+import ast.Stmt;
 import codegen.CodeGen;
+import codegen.CodeGenContext;
+import lexer.Lexer;
+import lexer.Token;
 import parser.Parser;
+import semantic.SemanticAnalyzer;
 
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.MethodVisitor;
-import org.objectweb.asm.Opcodes;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
+import static org.objectweb.asm.Opcodes.*;
 
-// A compiler written in Java that translates a custom language into JVM bytecode (.class files)
-public class AdirLangCompiler implements Opcodes {
+/**
+ * Entry point for the AdirLang compiler.
+ *
+ * <p>Orchestrates the full compilation pipeline:
+ * <pre>
+ *   .adir source → Lexer → Parser → SemanticAnalyzer → CodeGen → .class file
+ * </pre>
+ *
+ * <p>The output {@code .class} file is written to a path relative to the
+ * JVM working directory.  When invoked via the Gradle {@code compileAdir}
+ * task, that working directory is {@code build/run/}, placing the output at
+ * {@code build/run/adirlanguage/runtime/ProgramAdir.class}.
+ */
+public class AdirLangCompiler {
 
+    /** Internal JVM class name of the generated class. */
+    private static final String CLASS_INTERNAL_NAME = "adirlanguage/runtime/ProgramAdir";
 
-    // =========================
-    // Main: compile program.adir into AdirProgram.class
-    // =========================
+    /**
+     * Output path for the {@code .class} file, relative to the working
+     * directory.  Derived from {@link #CLASS_INTERNAL_NAME} to keep the two
+     * in sync automatically.
+     */
+    private static final Path OUTPUT_PATH = Path.of(CLASS_INTERNAL_NAME + ".class");
 
     public static void main(String[] args) throws Exception {
+        String source = loadSource();
 
+        List<Token> tokens  = new Lexer(source).tokenize();
+        List<Stmt>  program = new Parser(tokens).parseProgram();
+        new SemanticAnalyzer().check(program);
 
-        // Read source file - My language
-        String source;
+        byte[] bytecode = generateBytecode(program);
+        Files.createDirectories(OUTPUT_PATH.getParent());
+        Files.write(OUTPUT_PATH, bytecode);
+    }
+
+    // ----------------------------------------------------------------- Source loading
+
+    private static String loadSource() throws Exception {
         try (var in = AdirLangCompiler.class.getResourceAsStream("/program.adir")) {
             if (in == null) throw new RuntimeException("program.adir not found in resources");
-            source = new String(in.readAllBytes()).trim();
+            return new String(in.readAllBytes()).trim();
         }
+    }
 
-        Parser parser = new Parser(source);
-        List<Stmt> program = parser.parseProgram();
+    // ----------------------------------------------------------------- Bytecode generation
 
-        new semantic.SemanticAnalyzer().check(program);
-
-        
-
-        // AdirProgram.class
+    private static byte[] generateBytecode(List<Stmt> program) {
         ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
+        cw.visit(V17, ACC_PUBLIC, CLASS_INTERNAL_NAME, null, "java/lang/Object", null);
 
-        // public class AdirProgram extends Object
-        cw.visit(V17,ACC_PUBLIC, "adirlanguage/runtime/ProgramAdir", null, "java/lang/Object", null);
+        emitDefaultConstructor(cw);
+        emitMainMethod(cw, program);
 
+        cw.visitEnd();
+        return cw.toByteArray();
+    }
 
-        // constructor: public AdirProgram() { super(); }
+    /** Emits the implicit no-arg constructor: {@code public ProgramAdir() { super(); }}. */
+    private static void emitDefaultConstructor(ClassWriter cw) {
         MethodVisitor ctor = cw.visitMethod(ACC_PUBLIC, "<init>", "()V", null, null);
         ctor.visitCode();
         ctor.visitVarInsn(ALOAD, 0);
@@ -55,31 +85,19 @@ public class AdirLangCompiler implements Opcodes {
         ctor.visitInsn(RETURN);
         ctor.visitMaxs(0, 0);
         ctor.visitEnd();
+    }
 
-        // public static void main(String[] args) 
-        MethodVisitor mv = cw.visitMethod(ACC_PUBLIC | ACC_STATIC, "main", "([Ljava/lang/String;)V", null, null);
+    /** Emits {@code public static void main(String[] args)} containing the compiled program. */
+    private static void emitMainMethod(ClassWriter cw, List<Stmt> program) {
+        MethodVisitor mv = cw.visitMethod(
+                ACC_PUBLIC | ACC_STATIC, "main", "([Ljava/lang/String;)V", null, null);
         mv.visitCode();
 
-        
-      
-        Map<String, Integer> locals = new HashMap<>();
-        int[] nextLocalIndex = new int[]{1}; // slot 0 is for args
-
-
-        
-        for (Stmt stmt : program) {
-            CodeGen.emitStmt(mv, stmt, locals, nextLocalIndex);
-        }
+        CodeGen gen = new CodeGen(mv, new CodeGenContext());
+        program.forEach(gen::emitStmt);
 
         mv.visitInsn(RETURN);
         mv.visitMaxs(0, 0);
         mv.visitEnd();
-
-        cw.visitEnd();
-
-        // Write to AdirProgram.class
-        Path out = Path.of("adirlanguage", "runtime", "ProgramAdir.class");
-        Files.createDirectories(out.getParent());
-        Files.write(out, cw.toByteArray());
     }
 }
