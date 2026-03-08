@@ -8,3 +8,5 @@ app/*.class
 *.iml
 .vscode/
 .DS_Store
+.claude/
+adirlanguage/runtime/
