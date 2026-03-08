@@ -106,7 +106,7 @@ src/
 ```sh
 ./gradlew test
 ```
-97 tests covering the full compiler pipeline:
+tests covering the full compiler pipeline:
 - **Lexer** — token recognition, line/column tracking, error cases
 - **Parser** — AST structure, operator precedence, error handling
 - **Semantic Analyzer** — scoping rules, undefined variables, redeclaration
