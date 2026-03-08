@@ -101,6 +101,19 @@ src/
 
 ---
 
+## Tests
+
+```sh
+./gradlew test
+```
+97 tests covering the full compiler pipeline:
+- **Lexer** — token recognition, line/column tracking, error cases
+- **Parser** — AST structure, operator precedence, error handling
+- **Semantic Analyzer** — scoping rules, undefined variables, redeclaration
+- **End-to-End** — compiles and executes programs in memory, asserts output
+
+---
+
 ## Run
 
 ```sh
