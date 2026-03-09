@@ -2,7 +2,6 @@ package compiler;
 
 import ast.Stmt;
 import codegen.CodeGen;
-import codegen.CodeGenContext;
 import lexer.Lexer;
 import lexer.Token;
 import org.junit.jupiter.api.Nested;
@@ -53,7 +52,7 @@ class CompilerEndToEndTest {
                 ACC_PUBLIC | ACC_STATIC, "main", "([Ljava/lang/String;)V", null, null);
         mv.visitCode();
 
-        CodeGen gen = new CodeGen(mv, new CodeGenContext());
+        CodeGen gen = new CodeGen(mv);
         program.forEach(gen::emitStmt);
 
         mv.visitInsn(RETURN);

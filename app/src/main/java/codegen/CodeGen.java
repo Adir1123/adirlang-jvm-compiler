@@ -18,9 +18,9 @@ public class CodeGen {
     private final MethodVisitor mv;
     private final CodeGenContext ctx;
 
-    public CodeGen(MethodVisitor mv, CodeGenContext ctx) {
+    public CodeGen(MethodVisitor mv) {
         this.mv  = mv;
-        this.ctx = ctx;
+        this.ctx = new CodeGenContext();
     }
 
     // ---------------------------------------------------------------- Statements
@@ -31,21 +31,13 @@ public class CodeGen {
             mv.visitVarInsn(ISTORE, ctx.allocate(s.name()));
             return;
         }
-
         if (stmt instanceof PrintStmt s) {
             mv.visitFieldInsn(GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;");
             emitExpr(s.expr());
             mv.visitMethodInsn(INVOKEVIRTUAL, "java/io/PrintStream", "println", "(I)V", false);
             return;
         }
-
-        if (stmt instanceof IfStmt s) {
-            emitIf(s);
-            return;
-        }
-
-        // Unreachable for a well-formed sealed Stmt hierarchy.
-        throw new RuntimeException("Unknown Stmt node in codegen: " + stmt.getClass().getSimpleName());
+        if (stmt instanceof IfStmt s) emitIf(s);
     }
 
     private void emitIf(IfStmt s) {
@@ -74,16 +66,8 @@ public class CodeGen {
     // ---------------------------------------------------------------- Expressions
 
     private void emitExpr(Expr expr) {
-        if (expr instanceof NumberExpr n) {
-            pushInt(n.value());
-            return;
-        }
-
-        if (expr instanceof VarExpr v) {
-            mv.visitVarInsn(ILOAD, ctx.lookup(v.name()));
-            return;
-        }
-
+        if (expr instanceof NumberExpr n) { pushInt(n.value()); return; }
+        if (expr instanceof VarExpr v)    { mv.visitVarInsn(ILOAD, ctx.lookup(v.name())); return; }
         if (expr instanceof BinaryExpr b) {
             emitExpr(b.left());
             emitExpr(b.right());
@@ -91,11 +75,7 @@ public class CodeGen {
                 case ADD -> mv.visitInsn(IADD);
                 case MUL -> mv.visitInsn(IMUL);
             }
-            return;
         }
-
-        // Unreachable for a well-formed sealed Expr hierarchy.
-        throw new RuntimeException("Unknown Expr node in codegen: " + expr.getClass().getSimpleName());
     }
 
     // ------------------------------------------------------- Integer push helper

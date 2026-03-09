@@ -7,6 +7,7 @@ import lexer.TokenType;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 /**
  * Recursive-descent parser for AdirLang.
@@ -90,22 +91,14 @@ public class Parser {
     // ---------------------------------------------------------- Expressions
     // Precedence (low → high): addition → multiplication → primary
 
-    private Expr parseAddition() {
-        Expr left = parseMultiplication();
-        while (match(TokenType.PLUS)) {
-            Token opTok = previous();
-            Expr right = parseMultiplication();
-            left = new BinaryExpr(left, Op.ADD, right, opTok.line(), opTok.col());
-        }
-        return left;
-    }
+    private Expr parseAddition()       { return parseBinaryOp(this::parseMultiplication, TokenType.PLUS, Op.ADD); }
+    private Expr parseMultiplication() { return parseBinaryOp(this::parsePrimary,        TokenType.STAR, Op.MUL); }
 
-    private Expr parseMultiplication() {
-        Expr left = parsePrimary();
-        while (match(TokenType.STAR)) {
+    private Expr parseBinaryOp(Supplier<Expr> nextLevel, TokenType token, Op op) {
+        Expr left = nextLevel.get();
+        while (match(token)) {
             Token opTok = previous();
-            Expr right = parsePrimary();
-            left = new BinaryExpr(left, Op.MUL, right, opTok.line(), opTok.col());
+            left = new BinaryExpr(left, op, nextLevel.get(), opTok.line(), opTok.col());
         }
         return left;
     }

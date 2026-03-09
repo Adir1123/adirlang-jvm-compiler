@@ -2,7 +2,6 @@ package adirlanguage;
 
 import ast.Stmt;
 import codegen.CodeGen;
-import codegen.CodeGenContext;
 import lexer.Lexer;
 import lexer.Token;
 import parser.Parser;
@@ -11,6 +10,7 @@ import semantic.SemanticAnalyzer;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.MethodVisitor;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -59,7 +59,7 @@ public class AdirLangCompiler {
     private static String loadSource() throws Exception {
         try (var in = AdirLangCompiler.class.getResourceAsStream("/program.adir")) {
             if (in == null) throw new RuntimeException("program.adir not found in resources");
-            return new String(in.readAllBytes()).trim();
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8).trim();
         }
     }
 
@@ -93,7 +93,7 @@ public class AdirLangCompiler {
                 ACC_PUBLIC | ACC_STATIC, "main", "([Ljava/lang/String;)V", null, null);
         mv.visitCode();
 
-        CodeGen gen = new CodeGen(mv, new CodeGenContext());
+        CodeGen gen = new CodeGen(mv);
         program.forEach(gen::emitStmt);
 
         mv.visitInsn(RETURN);

@@ -38,18 +38,15 @@ public class SemanticAnalyzer {
     private void checkStmt(Stmt stmt, Set<String> defined) {
         if (stmt instanceof LetStmt s) {
             checkExpr(s.value(), defined);
-            if (defined.contains(s.name())) {
+            if (defined.contains(s.name()))
                 error(s.line(), s.col(), "Variable '" + s.name() + "' is already declared in this scope");
-            }
             defined.add(s.name());
             return;
         }
-
         if (stmt instanceof PrintStmt s) {
             checkExpr(s.expr(), defined);
             return;
         }
-
         if (stmt instanceof IfStmt s) {
             checkExpr(s.condition(), defined);
             // Each branch receives a copy of the enclosing scope so that
@@ -57,35 +54,22 @@ public class SemanticAnalyzer {
             // into the enclosing scope.
             checkBlock(s.thenBranch(), new HashSet<>(defined));
             s.elseBranch().ifPresent(branch -> checkBlock(branch, new HashSet<>(defined)));
-            return;
         }
-
-        // Unreachable for a well-formed sealed Stmt hierarchy.
-        throw new RuntimeException("Unknown Stmt node in semantic analysis: " + stmt.getClass().getSimpleName());
     }
 
     // -------------------------------------------------------- expression checks
 
     private void checkExpr(Expr expr, Set<String> defined) {
-        if (expr instanceof NumberExpr) {
-            return;
-        }
-
+        if (expr instanceof NumberExpr) return;
         if (expr instanceof VarExpr v) {
-            if (!defined.contains(v.name())) {
+            if (!defined.contains(v.name()))
                 error(v.line(), v.col(), "Undefined variable '" + v.name() + "'");
-            }
             return;
         }
-
         if (expr instanceof BinaryExpr b) {
             checkExpr(b.left(), defined);
             checkExpr(b.right(), defined);
-            return;
         }
-
-        // Unreachable for a well-formed sealed Expr hierarchy.
-        throw new RuntimeException("Unknown Expr node in semantic analysis: " + expr.getClass().getSimpleName());
     }
 
     // ----------------------------------------------------------------- error
